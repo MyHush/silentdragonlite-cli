@@ -1277,11 +1277,15 @@ impl LightClient {
 
         info!("Creating transaction");
 
-        let rawtx = self.wallet.write().unwrap().send_to_address(
-            u32::from_str_radix(&self.config.consensus_branch_id, 16).unwrap(), 
-            &self.sapling_spend, &self.sapling_output,
-            addrs
-        );
+        let rawtx = {
+            let _lock = self.sync_lock.lock().unwrap();
+
+            self.wallet.write().unwrap().send_to_address(
+                u32::from_str_radix(&self.config.consensus_branch_id, 16).unwrap(), 
+                &self.sapling_spend, &self.sapling_output,
+                addrs
+            )
+        };
         
         match rawtx {
             Ok(txbytes)   => broadcast_raw_tx(&self.get_server_uri(), self.config.no_cert_verification, txbytes),
