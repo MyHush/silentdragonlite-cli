@@ -1,4 +1,19 @@
-## SilentDragonLite CLI - A command line Hush light client. 
+# SilentDragonLite CLI
+
+<p align="left">
+    <a href="https://twitter.com/MyHushTeam">
+        <img src="https://img.shields.io/twitter/url?style=social&url=https%3A%2F%2Ftwitter.com%2Fmyhushteam"
+            alt="MyHushTeam's Twitter"></a>
+    <a href="https://twitter.com/intent/follow?screen_name=MyHushTeam">
+        <img src="https://img.shields.io/twitter/follow/MyHushTeam?style=social&logo=twitter"
+            alt="follow on Twitter"></a>
+    <a href="https://fosstodon.org/@myhushteam">
+        <img src="https://img.shields.io/badge/Mastodon-MyHushTeam-blue"
+            alt="follow on Mastodon"></a>
+    <a href="https://www.reddit.com/r/Myhush/">
+        <img src="https://img.shields.io/reddit/subreddit-subscribers/Myhush?style=social"
+            alt="MyHushTeam's Reddit"></a>
+</p>
 
 `silentdragonlite-cli` is a command line SilentDragonLite light client. To use it, download the latest binary from the releases page and run `./silentdragonlite-cli`
 
@@ -47,3 +62,6 @@ Here are some CLI arguments you can pass to `silentdragonlite-cli`. Please run `
     * Example: `./silentdragonlite-cli --seed "twenty four words seed phrase"`
  * `--recover`: Attempt to recover the seed phrase from a corrupted wallet
  
+### Support
+
+For support or other questions, join us on [Discord](https://myhush.org/discord), or tweet at [@MyHushTeam](https://twitter.com/MyHushTeam), or toot at our [Mastodon](https://fosstodon.org/@myhushteam) or join [Telegram](http://myhush.org/telegram) or [file an issue](https://github.com/MyHush/silentdragonlite-cli/issues).
