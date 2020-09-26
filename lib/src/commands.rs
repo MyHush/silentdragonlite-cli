@@ -668,15 +668,12 @@ impl Command for ImportCommand {
     }
 
     fn exec(&self, args: &[&str], lightclient: &LightClient) -> String {
-        if args.len() < 2 || args.len() > 3 {
+        if args.len() < 1 || args.len() > 2 {
             return format!("Insufficient arguments\n\n{}", self.help());
         }
 
         let key = args[0];
-        let birthday = match args[1].parse::<u64>() {
-            Ok(b) => b,
-            Err(_) => return format!("Couldn't parse {} as birthday. Please specify an integer. Ok to use '0'", args[1]),
-        };
+      
 
         let rescan = if args.len() == 3 {
             if args[2] == "norescan" || args[2] == "false" || args[2] == "no" { 
@@ -688,7 +685,7 @@ impl Command for ImportCommand {
             true
         };
 
-        let r = match lightclient.do_import_key(key.to_string(), birthday) {
+        let r = match lightclient.do_import_key(key.to_string(), 0) {
             Ok(r) => r.pretty(2),
             Err(e) => return format!("Error: {}", e),
         };
