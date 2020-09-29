@@ -14,7 +14,6 @@ use std::io::{BufReader, BufWriter, Error, ErrorKind};
 
 use protobuf::parse_from_bytes;
 
-
 use threadpool::ThreadPool;
 
 use json::{object, array, JsonValue};
@@ -382,7 +381,7 @@ impl LightClient {
     #[allow(dead_code)]
     pub fn unconnected(seed_phrase: String, dir: Option<String>) -> io::Result<Self> {
         let config = LightClientConfig::create_unconnected("test".to_string(), dir);
-        let  l = LightClient {
+        let mut l = LightClient {
                 wallet          : Arc::new(RwLock::new(LightWallet::new(Some(seed_phrase), &config, 0,0 )?)),
                 config          : config.clone(),
                 sapling_output  : vec![], 
@@ -410,7 +409,7 @@ impl LightClient {
                     "Cannot create a new wallet from seed, because a wallet already exists"));
         }
 
-        let  l = LightClient {
+        let mut l = LightClient {
                 wallet          : Arc::new(RwLock::new(LightWallet::new(None, config, latest_block, 0)?)),
                 config          : config.clone(),
                 sapling_output  : vec![], 
@@ -437,7 +436,7 @@ impl LightClient {
                     "Cannot create a new wallet from seed, because a wallet already exists"));
         }
 
-        let  l = LightClient {
+        let mut l = LightClient {
                 wallet          : Arc::new(RwLock::new(LightWallet::new(Some(seed_phrase), config, birthday, number)?)),
                 config          : config.clone(),
                 sapling_output  : vec![], 
@@ -468,7 +467,7 @@ impl LightClient {
         let mut file_buffer = BufReader::new(File::open(config.get_wallet_path())?);
             
         let wallet = LightWallet::read(&mut file_buffer, config)?;
-        let  lc = LightClient {
+        let  mut lc = LightClient {
             wallet          : Arc::new(RwLock::new(wallet)),
             config          : config.clone(),
             sapling_output  : vec![], 
@@ -478,7 +477,7 @@ impl LightClient {
         };
 
         #[cfg(feature = "embed_params")]
-        l.read_sapling_params();
+        lc.read_sapling_params();
 
         info!("Read wallet with birthday {}", lc.wallet.read().unwrap().get_first_tx_block());
         info!("Created LightClient to {}", &config.server);
