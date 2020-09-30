@@ -65,7 +65,7 @@ mod walletzkey;
 
 use data::{BlockData, WalletTx, Utxo, SaplingNoteData, SpendableNote, OutgoingTxMetadata};
 use extended_key::{KeyIndex, ExtendedPrivKey};
-use walletzkey::{WalletZKey, WalletZKeyType};
+use walletzkey::{WalletZKey, WalletTKey, WalletZKeyType};
 
 pub const MAX_REORG: usize = 100;
 pub const GAP_RULE_UNUSED_ADDRESSES: usize = 5;
@@ -124,11 +124,8 @@ pub struct LightWallet {
     // viewing keys and imported spending keys. 
     zkeys: Arc<RwLock<Vec<WalletZKey>>>,
 
-    
-    // Transparent keys. If the wallet is locked, then the secret keys will be encrypted,
-    // but the addresses will be present. 
-    tkeys: Arc<RwLock<Vec<secp256k1::SecretKey>>>,
-    pub taddresses: Arc<RwLock<Vec<String>>>,
+    // Transparent keys.
+    tkeys: Arc<RwLock<Vec<WalletTKey>>>,
 
     blocks: Arc<RwLock<Vec<BlockData>>>,
     pub txs: Arc<RwLock<HashMap<TxId, WalletTx>>>,
@@ -149,7 +146,7 @@ pub struct LightWallet {
 
 impl LightWallet {
     pub fn serialized_version() -> u64 {
-        return 7;
+        return 9;
     }
 
     fn get_taddr_from_bip39seed(config: &LightClientConfig, bip39_seed: &[u8], pos: u32) -> SecretKey {
@@ -255,8 +252,7 @@ impl LightWallet {
             nonce:       vec![],
             seed:        seed_bytes,
             zkeys:       Arc::new(RwLock::new(vec![WalletZKey::new_hdkey(hdkey_num, extsk)])),
-            tkeys:       Arc::new(RwLock::new(vec![tpk])),
-            taddresses:  Arc::new(RwLock::new(vec![taddr])),
+            tkeys:       Arc::new(RwLock::new(vec![WalletTKey::new_hdkey(tpk, taddr)])),
             blocks:      Arc::new(RwLock::new(vec![])),
             txs:         Arc::new(RwLock::new(HashMap::new())),
             mempool_txs: Arc::new(RwLock::new(HashMap::new())),
@@ -374,18 +370,29 @@ impl LightWallet {
 
         // Calculate the addresses
     
-        let tkeys = Vector::read(&mut reader, |r| {
-            let mut tpk_bytes = [0u8; 32];
-            r.read_exact(&mut tpk_bytes)?;
-            secp256k1::SecretKey::from_slice(&tpk_bytes).map_err(|e| io::Error::new(ErrorKind::InvalidData, e))
-        })?;      
-
-        let taddresses = if version >= 4 {
-            // Read the addresses
-            Vector::read(&mut reader, |r| utils::read_string(r))?
+        let wallet_tkeys = if version >= 9 {
+            Vector::read(&mut reader, |r| {
+                WalletTKey::read(r)
+            })?
         } else {
-            // Calculate the addresses
-            tkeys.iter().map(|sk| LightWallet::address_from_prefix_sk(&config.base58_pubkey_address(), sk)).collect()
+
+            let tkeys = Vector::read(&mut reader, |r| {
+                let mut tpk_bytes = [0u8; 32];
+                r.read_exact(&mut tpk_bytes)?;
+                secp256k1::SecretKey::from_slice(&tpk_bytes).map_err(|e| io::Error::new(ErrorKind::InvalidData, e))
+            })?;      
+
+            let taddresses = if version >= 4 {
+                // Read the addresses
+                Vector::read(&mut reader, |r| utils::read_string(r))?
+            } else {
+                // Calculate the addresses
+                tkeys.iter().map(|sk| LightWallet::address_from_prefix_sk(&config.base58_pubkey_address(), sk)).collect()
+            };
+
+            tkeys.iter().zip(taddresses.iter()).map(|(k, a)| 
+                WalletTKey::new_hdkey(*k, a.clone())
+            ).collect()
         };
 
         let blocks = Vector::read(&mut reader, |r| BlockData::read(r))?;
@@ -414,8 +421,7 @@ impl LightWallet {
             nonce:       nonce,
             seed:        seed_bytes,
             zkeys:       Arc::new(RwLock::new(zkeys)),
-            tkeys:       Arc::new(RwLock::new(tkeys)),
-            taddresses:  Arc::new(RwLock::new(taddresses)),
+            tkeys:       Arc::new(RwLock::new(wallet_tkeys)),
             blocks:      Arc::new(RwLock::new(blocks)),
             txs:         Arc::new(RwLock::new(txs)),
             mempool_txs: Arc::new(RwLock::new(HashMap::new())),
@@ -456,12 +462,7 @@ impl LightWallet {
 
         // Write the transparent private keys
         Vector::write(&mut writer, &self.tkeys.read().unwrap(),
-            |w, pk| w.write_all(&pk[..])
-        )?;
-
-        // Write the transparent addresses
-        Vector::write(&mut writer, &self.taddresses.read().unwrap(),
-            |w, a| utils::write_string(w, a)
+                |w, tk| tk.write(w)
         )?;
 
         Vector::write(&mut writer, &self.blocks.read().unwrap(), |w, b| b.write(w))?;
@@ -533,9 +534,14 @@ impl LightWallet {
 
     /// Get all t-address private keys. Returns a Vector of (address, secretkey)
     pub fn get_t_secret_keys(&self) -> Vec<(String, String)> {
-        self.tkeys.read().unwrap().iter().map(|sk| {
-            (self.address_from_sk(sk), 
-             sk[..].to_base58check(&self.config.base58_secretkey_prefix(), &[0x01]))
+        self.tkeys.read().unwrap().iter().map(|wtk| {
+            let sk = if wtk.tkey.is_some() {
+                wtk.tkey.unwrap()[..].to_base58check(&self.config.base58_secretkey_prefix(), &[0x01]) 
+            } else {
+                "".to_string()
+            };
+
+            (wtk.address.clone(), sk)
         }).collect::<Vec<(String, String)>>()
     }
 
@@ -545,6 +551,10 @@ impl LightWallet {
     pub fn add_zaddr(&self) -> String {
         if !self.unlocked {
             return "Error: Can't add key while wallet is locked".to_string();
+        }
+
+        if self.encrypted {
+            return "Error: Can't add key while wallet is encrypted".to_string();
         }
 
          // Find the highest pos we have
@@ -603,14 +613,49 @@ impl LightWallet {
             return "Error: Can't add key while wallet is locked".to_string();
         }
 
+        if self.encrypted {
+            return "Error: Can't add key while wallet is encrypted".to_string();
+        }
+
         let pos = self.tkeys.read().unwrap().len() as u32;
         let bip39_seed = bip39::Seed::new(&Mnemonic::from_entropy(&self.seed, Language::English).unwrap(), "");
         
         let sk = LightWallet::get_taddr_from_bip39seed(&self.config, &bip39_seed.as_bytes(), pos);
         let address = self.address_from_sk(&sk);
 
-        self.tkeys.write().unwrap().push(sk);
-        self.taddresses.write().unwrap().push(address.clone());
+        self.tkeys.write().unwrap().push(WalletTKey::new_hdkey(sk, address.clone()));
+
+        address
+    }
+
+    pub fn import_taddr(&self, sk: String) -> String {
+        if !self.unlocked {
+            return "Error: Can't add key while wallet is locked".to_string();
+        }
+
+    //// Decode Wif to base58 to hex
+       let sk_to_bs58 = bs58::decode(sk).into_vec().unwrap();
+
+       let bs58_to_hex = hex::encode(sk_to_bs58);
+
+    //// Manipulate string, to exclude last 4 bytes (checksum bytes), first 2 bytes (secretkey prefix) and the compressed flag (works only for compressed Wifs!) 
+
+        let slice_sk = &bs58_to_hex[2..66];
+
+    //// Get the SecretKey from slice
+        let secret_key = SecretKey::from_slice(&hex::decode(slice_sk).unwrap());
+
+        let sk_raw = secret_key.unwrap();
+
+    //// Make sure the key doesn't already exist
+          if self.tkeys.read().unwrap().iter().find(|&wk| wk.tkey.is_some() && wk.tkey.as_ref().unwrap() == &sk_raw.clone()).is_some() {
+            return "Error: Key already exists".to_string();
+        }
+    //// Get the taddr from key
+        let address = self.address_from_sk(&sk_raw);
+
+        //// Add to tkeys
+        self.tkeys.write().unwrap().push(WalletTKey::import_hdkey(sk_raw , address.clone()));
 
         address
     }
@@ -791,6 +836,12 @@ impl LightWallet {
         }
     }
 
+    pub fn get_all_taddresses(&self) -> Vec<String> {
+        self.tkeys.read().unwrap()
+            .iter()
+            .map(|wtx| wtx.address.clone()).collect()
+    }
+
     pub fn get_all_zaddresses(&self) -> Vec<String> {
         self.zkeys.read().unwrap().iter().map( |zk| {
             encode_payment_address(self.config.hrp_sapling_address(), &zk.zaddress)
@@ -863,6 +914,11 @@ impl LightWallet {
         self.nonce = nonce.as_ref().to_vec();
 
         // Encrypt the individual keys
+
+        self.tkeys.write().unwrap().iter_mut()
+        .map(|k| k.encrypt(&key))
+        .collect::<io::Result<Vec<()>>>()?;
+
         self.zkeys.write().unwrap().iter_mut()
             .map(|k| k.encrypt(&key))
             .collect::<io::Result<Vec<()>>>()?;
@@ -884,7 +940,12 @@ impl LightWallet {
 
         // Empty the seed and the secret keys
         self.seed.copy_from_slice(&[0u8; 32]);
-        self.tkeys = Arc::new(RwLock::new(vec![]));
+
+         // Remove all the private key from the tkeys
+        self.tkeys.write().unwrap().iter_mut().map(|tk| {
+            tk.lock()
+        }).collect::<io::Result<Vec<_>>>()?;
+
         // Remove all the private key from the zkeys
         self.zkeys.write().unwrap().iter_mut().map(|zk| {
                 zk.lock()
@@ -922,19 +983,10 @@ impl LightWallet {
         // we need to get the 64 byte bip39 entropy
         let bip39_seed = bip39::Seed::new(&Mnemonic::from_entropy(&seed, Language::English).unwrap(), "");
 
-        // Transparent keys
-        let mut tkeys = vec![];
-        for pos in 0..self.taddresses.read().unwrap().len() {
-            let sk = LightWallet::get_taddr_from_bip39seed(&self.config, &bip39_seed.as_bytes(), pos as u32);
-            let address = self.address_from_sk(&sk);
-
-            if address != self.taddresses.read().unwrap()[pos] {
-                return Err(io::Error::new(ErrorKind::InvalidData, 
-                    format!("taddress mismatch at {}. {} vs {}", pos, address, self.taddresses.read().unwrap()[pos])));
-            }
-
-            tkeys.push(sk);
-        }
+        // Go over the tkeys, and add the  keys again
+        self.tkeys.write().unwrap().iter_mut().map(|tk| {
+            tk.unlock(&key)
+        }).collect::<io::Result<Vec<()>>>()?;
 
         // Go over the zkeys, and add the spending keys again
         self.zkeys.write().unwrap().iter_mut().map(|zk| {
@@ -942,7 +994,6 @@ impl LightWallet {
             }).collect::<io::Result<Vec<()>>>()?;
 
         // Everything checks out, so we'll update our wallet with the decrypted values
-        self.tkeys = Arc::new(RwLock::new(tkeys));
         self.seed.copy_from_slice(&seed);
                 
         self.encrypted = true;
@@ -963,8 +1014,13 @@ impl LightWallet {
             self.unlock(passwd)?;
         }
 
+        // Remove encryption from individual tkeys
+        self.tkeys.write().unwrap().iter_mut().map(|tk| {
+                    tk.remove_encryption()
+                }).collect::<io::Result<Vec<()>>>()?;
+
          // Remove encryption from individual zkeys
-         self.zkeys.write().unwrap().iter_mut().map(|zk| {
+        self.zkeys.write().unwrap().iter_mut().map(|zk| {
             zk.remove_encryption()
         }).collect::<io::Result<Vec<()>>>()?;
         
@@ -1159,7 +1215,12 @@ impl LightWallet {
     // If one of the last 'n' taddress was used, ensure we add the next HD taddress to the wallet. 
     pub fn ensure_hd_taddresses(&self, address: &String) {        
         let last_addresses = {
-            self.taddresses.read().unwrap().iter().rev().take(GAP_RULE_UNUSED_ADDRESSES).map(|s| s.clone()).collect::<Vec<String>>()
+            self.tkeys.read().unwrap()
+                .iter()
+                .map(|t| t.address.clone())
+                .rev().take(GAP_RULE_UNUSED_ADDRESSES).map(|s| 
+                    s.clone())
+                .collect::<Vec<String>>()
         };
         
         match last_addresses.iter().position(|s| *s == *address) {
@@ -1252,7 +1313,8 @@ impl LightWallet {
         }
 
         // Scan for t outputs
-        let all_taddresses = self.taddresses.read().unwrap().iter()
+        let all_taddresses = self.tkeys.read().unwrap().iter()
+                                .map(|wtx| wtx.address.clone())
                                 .map(|a| a.clone())
                                 .collect::<Vec<_>>();
         for address in all_taddresses {
@@ -1279,7 +1341,8 @@ impl LightWallet {
                 // outgoing metadata
 
                 // Collect our t-addresses
-                let wallet_taddrs = self.taddresses.read().unwrap().iter()
+                let wallet_taddrs = self.tkeys.read().unwrap().iter()
+                        .map(|wtx| wtx.address.clone())
                         .map(|a| a.clone())
                         .collect::<HashSet<String>>();
 
@@ -2037,7 +2100,8 @@ impl LightWallet {
         // Create a map from address -> sk for all taddrs, so we can spend from the 
         // right address
         let address_to_sk = self.tkeys.read().unwrap().iter()
-                                .map(|sk| (self.address_from_sk(&sk), sk.clone()))
+                                .filter(|wtk| wtk.tkey.is_some())
+                                .map(|wtk| (wtk.address.clone(), wtk.tkey.unwrap().clone()))
                                 .collect::<HashMap<_,_>>();
 
         // Add all tinputs
@@ -2050,15 +2114,11 @@ impl LightWallet {
                     script_pubkey: Script { 0: utxo.script.clone() },
                 };
 
-                match address_to_sk.get(&utxo.address) {
-                    Some(sk) => builder.add_transparent_input(*sk, outpoint.clone(), coin.clone()),
-                    None     => {
-                        // Something is very wrong
-                        let e = format!("Couldn't find the secreykey for taddr {}", utxo.address);
-                        error!("{}", e);
-
-                        Err(zcash_primitives::transaction::builder::Error::InvalidAddress)
-                    }
+                if let Some(sk) = address_to_sk.get(&utxo.address) {
+                    return builder.add_transparent_input(*sk, outpoint.clone(), coin.clone())
+                } else {
+                    info!("Not adding a UTXO because secret key is absent.");
+                    return Ok(())
                 }
                 
             })

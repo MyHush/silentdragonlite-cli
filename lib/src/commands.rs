@@ -701,6 +701,42 @@ impl Command for ImportCommand {
     }
 }
 
+struct TImportCommand {}
+impl Command for TImportCommand {
+    fn help(&self) -> String {
+        let mut h = vec![];
+        h.push("Import an external WIF");
+        h.push("Usage:");
+        h.push("timport wif (Begins with U");
+        h.push("");
+
+        h.join("\n")
+    }
+
+
+    fn short_help(&self) -> String {
+        "Import wif to the wallet".to_string()
+    }
+
+    fn exec(&self, args: &[&str], lightclient: &LightClient) -> String {
+      
+        let key = args[0];
+
+        let r = match lightclient.do_import_tk(key.to_string()){
+            Ok(r) => r.pretty(2),
+            Err(e) => return format!("Error: {}", e),
+        };
+
+            match lightclient.do_rescan() {
+                Ok(_) => {},
+                Err(e) => return format!("Error: Rescan failed: {}", e),
+            };
+
+
+        return r;
+    }
+}
+
 struct HeightCommand {}
 impl Command for HeightCommand {
     fn help(&self)  -> String {
@@ -864,6 +900,7 @@ pub fn get_commands() -> Box<HashMap<String, Box<dyn Command>>> {
     map.insert("addresses".to_string(),         Box::new(AddressCommand{}));
     map.insert("height".to_string(),            Box::new(HeightCommand{}));
     map.insert("import".to_string(),            Box::new(ImportCommand{}));
+    map.insert("timport".to_string(),            Box::new(TImportCommand{}));
     map.insert("export".to_string(),            Box::new(ExportCommand{}));
     map.insert("info".to_string(),              Box::new(InfoCommand{}));
     map.insert("coinsupply".to_string(),        Box::new(CoinsupplyCommand{}));
