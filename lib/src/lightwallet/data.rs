@@ -141,8 +141,7 @@ impl SaplingNoteData {
 
     // Reading a note also needs the corresponding address to read from.
     pub fn read<R: Read>(mut reader: R) -> io::Result<Self> {
-        let version = reader.read_u64::<LittleEndian>()?;
-        assert_eq!(version, SaplingNoteData::serialized_version());
+        let _version = reader.read_u64::<LittleEndian>()?;
 
         let account = reader.read_u64::<LittleEndian>()? as usize;
 
@@ -488,9 +487,9 @@ pub struct SpendableNote {
 }
 
 impl SpendableNote {
-    pub fn from(txid: TxId, nd: &SaplingNoteData, anchor_offset: usize, extsk: &ExtendedSpendingKey) -> Option<Self> {
+    pub fn from(txid: TxId, nd: &SaplingNoteData, anchor_offset: usize, extsk: &Option<ExtendedSpendingKey>) -> Option<Self> {
         // Include only notes that haven't been spent, or haven't been included in an unconfirmed spend yet.
-        if nd.spent.is_none() && nd.unconfirmed_spent.is_none() &&
+        if nd.spent.is_none() && nd.unconfirmed_spent.is_none() && extsk.is_some() &&
                 nd.witnesses.len() >= (anchor_offset + 1) {
             let witness = nd.witnesses.get(nd.witnesses.len() - anchor_offset - 1);
 
@@ -500,7 +499,7 @@ impl SpendableNote {
                 diversifier: nd.diversifier,
                 note: nd.note.clone(),
                 witness: w.clone(),
-                extsk: extsk.clone(),
+                extsk: extsk.clone().unwrap(),
             })
         } else {
             None

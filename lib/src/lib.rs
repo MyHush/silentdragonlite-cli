@@ -6,7 +6,7 @@ pub mod grpcconnector;
 pub mod lightwallet;
 pub mod commands;
 
-
+#[cfg(feature = "embed_params")]
 #[derive(RustEmbed)]
 #[folder = "zcash-params/"]
 pub struct SaplingParams;

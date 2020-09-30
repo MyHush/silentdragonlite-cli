@@ -3,8 +3,13 @@ name = "silentdragonlitelib"
 version = "0.1.0"
 edition = "2018"
 
+[features]
+default = ["embed_params"]
+embed_params = []
+
 [dependencies]
 base58 = "0.1.0"
+bs58 = { version = "0.2", features = ["check"] }
 log = "0.4"
 log4rs = "0.8.3"
 dirs = "2.0.2"
