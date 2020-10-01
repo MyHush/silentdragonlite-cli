@@ -628,7 +628,7 @@ impl LightWallet {
         address
     }
 
-    pub fn import_taddr(&self, sk: String) -> String {
+    pub fn import_taddr(&self, sk: String,  birthday: u64) -> String {
         if !self.unlocked {
             return "Error: Can't add key while wallet is locked".to_string();
         }

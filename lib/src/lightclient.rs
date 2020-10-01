@@ -1011,7 +1011,7 @@ impl LightClient {
     }
 
     /// Import a new private key
-    pub fn do_import_tk(&self, sk: String) -> Result<JsonValue, String> {
+    pub fn do_import_tk(&self, sk: String,  birthday: u64) -> Result<JsonValue, String> {
         if !self.wallet.read().unwrap().is_unlocked_for_spending() {
             error!("Wallet is locked");
             return Err("Wallet is locked".to_string());
@@ -1020,7 +1020,7 @@ impl LightClient {
         let new_address = {
             let  wallet = self.wallet.write().unwrap();
 
-            let addr = wallet.import_taddr(sk);
+            let addr = wallet.import_taddr(sk, birthday);
             if addr.starts_with("Error") {
                 let e = format!("Error creating new address{}", addr);
                     error!("{}", e);

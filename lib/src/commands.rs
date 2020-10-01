@@ -696,10 +696,13 @@ impl Command for TImportCommand {
     }
 
     fn exec(&self, args: &[&str], lightclient: &LightClient) -> String {
-      
-        let key = args[0];
+        if args.len() < 1 || args.len() > 2 {
+            return format!("Insufficient arguments\n\n{}", self.help());
+        }
 
-        let r = match lightclient.do_import_tk(key.to_string()){
+        let key = args[0];
+      
+        let r = match lightclient.do_import_tk(key.to_string(), 0) {
             Ok(r) => r.pretty(2),
             Err(e) => return format!("Error: {}", e),
         };
