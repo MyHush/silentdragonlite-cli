@@ -674,28 +674,10 @@ impl Command for ImportCommand {
 
         let key = args[0];
       
-
-        let rescan = if args.len() == 3 {
-            if args[2] == "norescan" || args[2] == "false" || args[2] == "no" { 
-                false 
-            } else {
-                return format!("Couldn't undestand the argument '{}'. Please pass 'norescan' to prevent rescanning the wallet", args[2]);
-            }
-        } else {
-            true
-        };
-
         let r = match lightclient.do_import_key(key.to_string(), 0) {
             Ok(r) => r.pretty(2),
             Err(e) => return format!("Error: {}", e),
         };
-
-        if rescan {
-            match lightclient.do_rescan() {
-                Ok(_) => {},
-                Err(e) => return format!("Error: Rescan failed: {}", e),
-            };
-        }
 
         return r;
     }
@@ -726,12 +708,6 @@ impl Command for TImportCommand {
             Ok(r) => r.pretty(2),
             Err(e) => return format!("Error: {}", e),
         };
-
-            match lightclient.do_rescan() {
-                Ok(_) => {},
-                Err(e) => return format!("Error: Rescan failed: {}", e),
-            };
-
 
         return r;
     }
