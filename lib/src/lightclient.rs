@@ -1018,7 +1018,7 @@ impl LightClient {
         }
 
         let new_address = {
-            let  wallet = self.wallet.write().unwrap();
+            let mut  wallet = self.wallet.write().unwrap();
 
             let addr = wallet.import_taddr(sk, birthday);
             if addr.starts_with("Error") {

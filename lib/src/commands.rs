@@ -668,7 +668,7 @@ impl Command for ImportCommand {
         }
 
         let key = args[0];
-      
+
         let r = match lightclient.do_import_key(key.to_string(), 0) {
             Ok(r) => r.pretty(2),
             Err(e) => return format!("Error: {}", e),
@@ -701,7 +701,7 @@ impl Command for TImportCommand {
         }
 
         let key = args[0];
-      
+
         let r = match lightclient.do_import_tk(key.to_string(), 0) {
             Ok(r) => r.pretty(2),
             Err(e) => return format!("Error: {}", e),

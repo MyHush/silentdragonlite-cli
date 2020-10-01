@@ -628,7 +628,7 @@ impl LightWallet {
         address
     }
 
-    pub fn import_taddr(&self, sk: String,  birthday: u64) -> String {
+    pub fn import_taddr(&mut self, sk: String,  birthday: u64) -> String {
         if !self.unlocked {
             return "Error: Can't add key while wallet is locked".to_string();
         }
@@ -656,6 +656,11 @@ impl LightWallet {
 
         //// Add to tkeys
         self.tkeys.write().unwrap().push(WalletTKey::import_hdkey(sk_raw , address.clone()));
+
+        // Adjust wallet birthday
+        if birthday < self.birthday {
+            self.birthday = if birthday < self.config.sapling_activation_height {self.config.sapling_activation_height} else {birthday};
+        }
 
         address
     }
