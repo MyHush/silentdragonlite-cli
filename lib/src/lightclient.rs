@@ -1166,6 +1166,34 @@ impl LightClient {
         }
     }
 
+    pub fn do_shield(&self, address: Option<String>) -> Result<String, String> {
+        use zcash_primitives::transaction::components::amount::DEFAULT_FEE;
+        use std::convert::TryInto;
+
+        let fee = DEFAULT_FEE.try_into().unwrap();
+        let tbal = self.wallet.read().unwrap().tbalance(None);
+
+        // Make sure there is a balance, and it is greated than the amount
+        if tbal <= fee {
+            return Err(format!("Not enough transparent balance to shield. Have {} puposhis, need more than {} puposhis to cover tx fee", tbal, fee));
+        }
+
+        let addr = address.or(self.wallet.read().unwrap().get_all_zaddresses().get(0).map(|s| s.clone())).unwrap();
+
+        let result = {
+            let _lock = self.sync_lock.lock().unwrap();
+            self.wallet.read().unwrap().send_to_address(
+                u32::from_str_radix(&self.config.consensus_branch_id, 16).unwrap(), 
+                &self.sapling_spend, &self.sapling_output, 
+                true, 
+                vec![(&addr, tbal - fee, None)],
+                |txbytes| broadcast_raw_tx(&self.get_server_uri(),self.config.no_cert_verification, txbytes)
+            )
+        };
+
+        result.map(|(txid, _)| txid)
+    }
+
     fn do_sync_internal(&self, print_updates: bool, retry_count: u32) -> Result<JsonValue, String> {
         // We can only do one sync at a time because we sync blocks in serial order
         // If we allow multiple syncs, they'll all get jumbled up.
@@ -1477,6 +1505,7 @@ impl LightClient {
             self.wallet.write().unwrap().send_to_address(
                 u32::from_str_radix(&self.config.consensus_branch_id, 16).unwrap(), 
                 &self.sapling_spend, &self.sapling_output,
+                false,
                 addrs,
                 |txbytes| broadcast_raw_tx(&self.get_server_uri(), self.config.no_cert_verification, txbytes)
             )
