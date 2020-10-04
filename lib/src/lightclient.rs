@@ -790,6 +790,8 @@ impl LightClient {
                                 "address"            => address,
                                 "spendable"          => spendable,
                                 "spent"              => nd.spent.map(|spent_txid| format!("{}", spent_txid)),
+                                "spent_at_height"    => nd.spent_at_height.map(|h| format!("{}", h)),
+                                "witness_size"       => nd.witnesses.len(),
                                 "unconfirmed_spent"  => nd.unconfirmed_spent.map(|spent_txid| format!("{}", spent_txid)),
                             })
                         }
