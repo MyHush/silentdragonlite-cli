@@ -149,6 +149,9 @@ impl LightClientConfig {
                 zcash_data_location = dirs::data_dir().expect("Couldn't determine app data directory!");
                 zcash_data_location.push("silentdragonlite");
             } else {
+                if dirs::home_dir().is_none() {
+                    info!("Couldn't determine home dir!");
+                }
                 zcash_data_location = dirs::home_dir().expect("Couldn't determine home directory!");
                 zcash_data_location.push(".silentdragonlite");
             };
@@ -183,6 +186,10 @@ impl LightClientConfig {
     }
 
     pub fn get_zcash_params_path(&self) -> io::Result<Box<Path>> {
+        if dirs::home_dir().is_none() {
+            return Err(io::Error::new(io::ErrorKind::InvalidData, "Couldn't determine Home Dir"));
+        }
+
         let mut zcash_params = self.get_zcash_data_path().into_path_buf();
         zcash_params.push("..");
         if cfg!(target_os="macos") || cfg!(target_os="windows") {
@@ -353,7 +360,9 @@ impl LightClient {
             self.sapling_spend.extend_from_slice(sapling_spend);
         }
 
-        // Ensure that the sapling params are stored on disk properly as well. 
+
+    // Ensure that the sapling params are stored on disk properly as well. Only on desktop
+    if cfg!(all(not(target_os="ios"), not(target_os="android"))) {
         match self.config.get_zcash_params_path() {
             Ok(zcash_params_dir) => {
                 // Create the sapling output and spend params files
@@ -369,8 +378,9 @@ impl LightClient {
             },
             Err(e) => {
                 eprintln!("{}", e);
-            }
-        };
+                }
+            };
+        }
 
         Ok(())
     }
