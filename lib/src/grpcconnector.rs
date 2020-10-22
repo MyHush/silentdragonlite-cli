@@ -51,7 +51,7 @@ async fn get_client(uri: &http::Uri, no_cert: bool) -> Result<CompactTxStreamerC
 
         let tls = ClientTlsConfig::new()
             .rustls_client_config(config)
-            .domain_name(uri.host().unwrap());
+            .domain_name("lite.myhush.org");
         
         Channel::builder(uri.clone())
             .tls_config(tls)
